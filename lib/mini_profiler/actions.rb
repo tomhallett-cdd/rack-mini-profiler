@@ -119,6 +119,10 @@ module Rack
         self.flamegraph(page_struct[:flamegraph], page_struct[:request_path], env)
       end
 
+      def serve_speedscope(env)
+        self.speedscope(env)
+      end
+
       def serve_profile_gc(env, client_settings)
         return tool_disabled_message(client_settings) if !advanced_debugging_enabled?
 
