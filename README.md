@@ -467,6 +467,8 @@ content_security_policy_nonce       | Rails: Current nonce<br>Rack: nil         
 enable_hotwire_turbo_drive_support  | `false`                                                 | Enable support for Hotwire TurboDrive page transitions.
 profile_parameter                   | `'pp'`                                                  | The query parameter used to interact with this gem.
 
+redact_sql_queries                  | `false`                                                  | When this is true, snapshots_redact_sql_queries will be ignored, and SQL queries will be redacted, but the backtrace and duration of each SQL query will be saved to keep debugging performance issues possible.
+
 ### Using MiniProfiler with `Rack::Deflate` middleware
 
 If you are using `Rack::Deflate` with Rails and `rack-mini-profiler` in its default configuration,

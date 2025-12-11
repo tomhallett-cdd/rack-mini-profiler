@@ -111,6 +111,8 @@ module Rack
       end
 
       def redact_sql_queries?
+        return true if config.redact_sql_queries
+
         Thread.current[:mp_ongoing_snapshot] == true &&
         Rack::MiniProfiler.config.snapshots_redact_sql_queries
       end

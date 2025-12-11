@@ -62,6 +62,7 @@ module Rack
           @snapshots_redact_sql_queries = true
           @snapshots_transport_gzip_requests = false
           @enable_hotwire_turbo_drive_support = false
+          @redact_sql_queries = false
 
           @profile_parameter = "pp"
 
@@ -77,7 +78,7 @@ module Rack
         :storage_options, :user_provider, :enable_advanced_debugging_tools,
         :skip_sql_param_names, :suppress_encoding, :max_sql_param_length,
         :content_security_policy_nonce, :enable_hotwire_turbo_drive_support,
-        :flamegraph_mode, :flamegraph_ignore_gc, :profile_parameter
+        :flamegraph_mode, :flamegraph_ignore_gc, :profile_parameter, :redact_sql_queries
 
       # ui accessors
       attr_accessor :collapse_results, :max_traces_to_show, :position,
