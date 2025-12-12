@@ -39,6 +39,15 @@ module Rack
         url = "#{path}includes.js?v=#{version}" if !url
         css_url = "#{path}includes.css?v=#{version}" if !css_url
 
+        configured_nonce = @config.content_security_policy_nonce
+        if configured_nonce && !configured_nonce.is_a?(String)
+          configured_nonce = configured_nonce.call(env, response_headers)
+        end
+
+        content_security_policy_nonce = configured_nonce ||
+                                        env["action_dispatch.content_security_policy_nonce"] ||
+                                        env["secure_headers_content_security_policy_nonce"]
+
         settings = {
          path: path,
          url: url,
@@ -57,7 +66,7 @@ module Rack
          collapseResults: @config.collapse_results,
          htmlContainer: @config.html_container,
          hiddenCustomFields: @config.snapshot_hidden_custom_fields.join(','),
-         cspNonce: content_security_policy_nonce(env, response_headers),
+         cspNonce: content_security_policy_nonce,
          hotwireTurboDriveSupport: @config.enable_hotwire_turbo_drive_support,
         }
 
@@ -101,9 +110,8 @@ module Rack
       end
 
       def flamegraph(graph, path, env)
-        response_headers = { 'content-type' => 'text/html' }
+        headers = { 'content-type' => 'text/html' }
         iframe_src = "#{public_base_path(env)}speedscope/index.html"
-
         html = <<~HTML
           <!DOCTYPE html>
           <html>
@@ -115,7 +123,7 @@ module Rack
               </style>
             </head>
             <body>
-              <script type="text/javascript" #{nonce_attr(env, response_headers)}>
+              <script type="text/javascript">
                 var graph = #{JSON.generate(graph)};
                 var json = JSON.stringify(graph);
                 var blob = new Blob([json], { type: 'text/plain' });
@@ -129,31 +137,7 @@ module Rack
             </body>
           </html>
         HTML
-        [200, response_headers, [html]]
-      end
-
-      def speedscope(env)
-        response_headers = { 'content-type' => 'text/html' }
-        html = <<~HTML
-          <!DOCTYPE html>
-          <html lang="en">
-            <head>
-              <meta charset="UTF-8">
-              <meta name="viewport" content="width=device-width, initial-scale=1.0">
-              <meta http-equiv="X-UA-Compatible" content="ie=edge">
-              <title>speedscope</title>
-              <link href="fonts/source-code-pro-regular.css" rel="stylesheet">
-              <script></script>
-              <link rel="stylesheet" href="reset.8c46b7a1.css">
-              <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.bc503437.png">
-              <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.f74b3187.png">
-            </head>
-            <body>
-              <script src="speedscope.f27db165.js" #{nonce_attr(env, response_headers)}></script>
-            </body>
-          </html>
-        HTML
-        [200, response_headers, [html]]
+        [200, headers, [html]]
       end
 
       def help(client_settings, env)
@@ -208,22 +192,6 @@ module Rack
 
       def public_base_path(env)
         "#{env['RACK_MINI_PROFILER_ORIGINAL_SCRIPT_NAME']}#{@config.base_url_path}"
-      end
-
-      def nonce_attr(env, response_headers = {})
-        nonce = content_security_policy_nonce(env, response_headers)
-        nonce && nonce.length > 0 ? "nonce=\"#{nonce}\"" : ""
-      end
-
-      def content_security_policy_nonce(env, response_headers = {})
-        configured_nonce = @config.content_security_policy_nonce
-        if configured_nonce && !configured_nonce.is_a?(String)
-          configured_nonce = configured_nonce.call(env, response_headers)
-        end
-
-        configured_nonce ||
-          env["action_dispatch.content_security_policy_nonce"] ||
-          env["secure_headers_content_security_policy_nonce"]
       end
     end
   end

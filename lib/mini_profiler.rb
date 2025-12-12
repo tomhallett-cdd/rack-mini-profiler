@@ -206,8 +206,6 @@ module Rack
           return serve_snapshot(env)
         when 'flamegraph'
           return serve_flamegraph(env)
-        when 'speedscope/index.html'
-          return serve_speedscope(env)
         end
 
         return client_settings.handle_cookie(serve_file(env, file_name: file_name))
