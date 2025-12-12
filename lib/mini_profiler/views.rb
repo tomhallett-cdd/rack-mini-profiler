@@ -39,15 +39,6 @@ module Rack
         url = "#{path}includes.js?v=#{version}" if !url
         css_url = "#{path}includes.css?v=#{version}" if !css_url
 
-        configured_nonce = @config.content_security_policy_nonce
-        if configured_nonce && !configured_nonce.is_a?(String)
-          configured_nonce = configured_nonce.call(env, response_headers)
-        end
-
-        content_security_policy_nonce = configured_nonce ||
-                                        env["action_dispatch.content_security_policy_nonce"] ||
-                                        env["secure_headers_content_security_policy_nonce"]
-
         settings = {
          path: path,
          url: url,
@@ -66,7 +57,7 @@ module Rack
          collapseResults: @config.collapse_results,
          htmlContainer: @config.html_container,
          hiddenCustomFields: @config.snapshot_hidden_custom_fields.join(','),
-         cspNonce: content_security_policy_nonce,
+         cspNonce: csp_nonce(env, response_headers),
          hotwireTurboDriveSupport: @config.enable_hotwire_turbo_drive_support,
         }
 
@@ -110,7 +101,7 @@ module Rack
       end
 
       def flamegraph(graph, path, env)
-        headers = { 'content-type' => 'text/html' }
+        response_headers = { 'content-type' => 'text/html' }
         iframe_src = "#{public_base_path(env)}speedscope/index.html"
         html = <<~HTML
           <!DOCTYPE html>
@@ -123,7 +114,7 @@ module Rack
               </style>
             </head>
             <body>
-              <script type="text/javascript">
+              <script type="text/javascript" #{csp_nonce_html_attribute(env, response_headers)}>
                 var graph = #{JSON.generate(graph)};
                 var json = JSON.stringify(graph);
                 var blob = new Blob([json], { type: 'text/plain' });
@@ -137,7 +128,7 @@ module Rack
             </body>
           </html>
         HTML
-        [200, headers, [html]]
+        [200, response_headers, [html]]
       end
 
       def help(client_settings, env)
@@ -192,6 +183,22 @@ module Rack
 
       def public_base_path(env)
         "#{env['RACK_MINI_PROFILER_ORIGINAL_SCRIPT_NAME']}#{@config.base_url_path}"
+      end
+
+      def csp_nonce(env, response_headers = {})
+        configured_nonce = @config.content_security_policy_nonce
+        if configured_nonce && !configured_nonce.is_a?(String)
+          configured_nonce = configured_nonce.call(env, response_headers)
+        end
+
+        configured_nonce ||
+          env["action_dispatch.content_security_policy_nonce"] ||
+          env["secure_headers_content_security_policy_nonce"]
+      end
+
+      def csp_nonce_html_attribute(env, response_headers = {})
+        nonce = csp_nonce(env, response_headers)
+        nonce && nonce.length > 0 ? "nonce=\"#{nonce}\"" : ""
       end
     end
   end
