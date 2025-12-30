@@ -178,7 +178,7 @@ module Rack
         end
       )
       if skip_it
-        return client_settings.handle_cookie(@app.call(env))
+        return client_settings.handle_cookie(@app.call(env), preserve_cookie: true)
       end
 
       skip_it = (@config.pre_authorize_cb && !@config.pre_authorize_cb.call(env))
