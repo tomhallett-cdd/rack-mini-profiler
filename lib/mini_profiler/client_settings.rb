@@ -46,6 +46,7 @@ module Rack
           # this is non-obvious, don't kill the profiling cookie on errors or short requests
           # this ensures that stuff that never reaches the rails stack does not kill profiling
           if !preserve_cookie && status.to_i >= 200 && status.to_i < 300 && ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - @start) > 0.1)
+            log_it("DISCARD_COOKIE_200", "path_unknown")
             discard_cookie!(headers)
           end
         else
@@ -87,8 +88,19 @@ module Rack
         end
       end
 
-      def has_valid_cookie?
+      def log_it(msg, path)
+        msg = msg.to_s.ljust(40)[0,40]
+        Rails.logger.error "==== MINI_PROFILER: #{msg}: path: #{path}"
+      end
+
+      def has_valid_cookie?(path)
         valid_cookie = !@cookie.nil?
+
+        if valid_cookie
+          log_it("HAS_VALID_COOKIE_FIRST_CHECK_TRUE", path)
+        else
+          log_it("HAS_VALID_COOKIE_FIRST_CHECK_FALSE", path)
+        end
 
         if (MiniProfiler.config.authorization_mode == :allow_authorized) && valid_cookie
           begin
@@ -102,6 +114,12 @@ module Rack
           valid_cookie = @allowed_tokens &&
             (Array === @orig_auth_tokens) &&
             ((@allowed_tokens & @orig_auth_tokens).length > 0)
+        end
+
+        if valid_cookie
+          log_it("HAS_VALID_COOKIE_SECOND_CHECK_TRUE", path)
+        else
+          log_it("HAS_VALID_COOKIE_SECOND_CHECK_FALSE", path)
         end
 
         valid_cookie
