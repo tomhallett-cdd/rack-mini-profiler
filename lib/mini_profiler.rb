@@ -208,7 +208,7 @@ module Rack
           return serve_flamegraph(env)
         end
 
-        return client_settings.handle_cookie(serve_file(env, file_name: file_name))
+        return client_settings.handle_cookie(serve_file(env, file_name: file_name), preserve_cookie: true)
       end
 
       has_disable_cookie = client_settings.disable_profiling?
@@ -262,6 +262,7 @@ module Rack
 
       trace_exceptions = matches_action?('trace-exceptions', env) && defined? TracePoint
       status, headers, body, exceptions, trace = nil
+      request_skipped_app = false
 
       if trace_exceptions
         exceptions = []
@@ -331,6 +332,7 @@ module Rack
             )
           end
         elsif path == '/rack-mini-profiler/requests'
+          request_skipped_app = true
           status, headers, body = [200, { Rack::CONTENT_TYPE => 'text/html' }, [blank_page_html.dup]] # important to dup here!
         else
           status, headers, body = @app.call(env)
@@ -346,7 +348,7 @@ module Rack
         skip_it = true
       end
 
-      return client_settings.handle_cookie([status, headers, body]) if skip_it
+      return client_settings.handle_cookie([status, headers, body], preserve_cookie: request_skipped_app) if skip_it
 
       # we must do this here, otherwise current[:discard] is not being properly treated
       if trace_exceptions
