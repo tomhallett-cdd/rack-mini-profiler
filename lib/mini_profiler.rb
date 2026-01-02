@@ -193,7 +193,7 @@ module Rack
 
       if skip_it || (
         @config.authorization_mode == :allow_authorized &&
-        !client_settings.has_valid_cookie?(path)
+        !client_settings.has_valid_cookie?
       )
         log_it("PRE_AUTH_OR_NO_COOKIE", path)
         if take_snapshot?(path)
