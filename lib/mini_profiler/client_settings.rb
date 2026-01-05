@@ -15,7 +15,6 @@ module Rack
 
       def initialize(env, store, start)
         @request = ::Rack::Request.new(env)
-        log_it_cs("CLIENT_SETTINGS", @request.path)
         @cookie = @request.cookies[COOKIE_NAME]
         @store = store
         @start = start
@@ -36,8 +35,9 @@ module Rack
           @backtrace_level = nil
         end
 
-        @orig_backtrace_level = @backtrace_level
+        log_it_cs("CLIENT_SETTINGS")
 
+        @orig_backtrace_level = @backtrace_level
       end
 
       def handle_cookie(result, preserve_cookie: false)
@@ -47,7 +47,7 @@ module Rack
           # this is non-obvious, don't kill the profiling cookie on errors or short requests
           # this ensures that stuff that never reaches the rails stack does not kill profiling
           if !preserve_cookie && status.to_i >= 200 && status.to_i < 300 && ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - @start) > 0.1)
-            log_it_cs("DISCARD_COOKIE_200", @request.path)
+            log_it_cs("DISCARD_COOKIE_200")
             discard_cookie!(headers)
           end
         else
@@ -89,18 +89,18 @@ module Rack
         end
       end
 
-      def log_it_cs(msg, path)
+      def log_it_cs(msg)
         msg = msg.to_s.ljust(40)[0,40]
-        Rails.logger.error "==== MINI_PROFILER: #{msg}: path: #{path}"
+        Rails.logger.error "==== MINI_PROFILER [#{@request.ip}]: #{msg}: path: #{@request.path}"
       end
 
       def has_valid_cookie?
         valid_cookie = !@cookie.nil?
 
         if valid_cookie
-          log_it_cs("HAS_VALID_COOKIE_FIRST_CHECK_TRUE", @request.path)
+          log_it_cs("HAS_VALID_COOKIE_FIRST_CHECK_TRUE")
         else
-          log_it_cs("HAS_VALID_COOKIE_FIRST_CHECK_FALSE", @request.path)
+          log_it_cs("HAS_VALID_COOKIE_FIRST_CHECK_FALSE")
         end
 
         if (MiniProfiler.config.authorization_mode == :allow_authorized) && valid_cookie
@@ -118,9 +118,9 @@ module Rack
         end
 
         if valid_cookie
-          log_it_cs("HAS_VALID_COOKIE_SECOND_CHECK_TRUE", @request.path)
+          log_it_cs("HAS_VALID_COOKIE_SECOND_CHECK_TRUE")
         else
-          log_it_cs("HAS_VALID_COOKIE_SECOND_CHECK_FALSE", @request.path)
+          log_it_cs("HAS_VALID_COOKIE_SECOND_CHECK_FALSE")
         end
 
         valid_cookie
