@@ -164,13 +164,12 @@ module Rack
 
     def call(env)
       start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-      client_settings = ClientSettings.new(env, @storage, start)
-      MiniProfiler.deauthorize_request if @config.authorization_mode == :allow_authorized
-
       status = headers = body = nil
       path         = env['PATH_INFO'].sub('//', '/')
-
       log_it(env, "CALL", path)
+
+      client_settings = ClientSettings.new(env, @storage, start)
+      MiniProfiler.deauthorize_request if @config.authorization_mode == :allow_authorized
 
       # Someone (e.g. Rails engine) could change the SCRIPT_NAME so we save it
       env['RACK_MINI_PROFILER_ORIGINAL_SCRIPT_NAME'] = ENV['PASSENGER_BASE_URI'] || env['SCRIPT_NAME']
