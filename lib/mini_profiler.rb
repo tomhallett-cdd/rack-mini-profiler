@@ -235,16 +235,18 @@ module Rack
       has_disable_cookie = client_settings.disable_profiling?
       # manual session disable / enable
       if matches_action?('disable', env) || has_disable_cookie
+        log_it(env, "DISABLE_PROFILING")
         skip_it = true
       end
 
       if matches_action?('enable', env)
+        log_it(env, "ENABLE_PROFILING")
         skip_it = false
         config.enabled = true
       end
 
       if skip_it || !config.enabled
-        log_it(env, "DISABLE_PROFILING")
+        log_it(env, "DISABLING_PROFILING")
         status, headers, body = @app.call(env)
         client_settings.disable_profiling = true
         return client_settings.handle_cookie([status, headers, body])
