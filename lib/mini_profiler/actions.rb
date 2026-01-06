@@ -51,17 +51,42 @@ module Rack
         response.finish
       end
 
+      # example file_name: "includes.js"
+      # example resources_root: "/tmp/src/vendor/rack-mini-profiler/lib/html"
       def serve_file(env, file_name:)
-        resources_env = env.dup
-        resources_env['PATH_INFO'] = file_name
+        if @config.serve_file_mode == :rack_files
+          resources_env = env.dup
+          resources_env['PATH_INFO'] = file_name
 
-        if Gem::Version.new(Rack.release) >= Gem::Version.new("2.1.0")
-          rack_file = Rack::Files.new(resources_root, 'cache-control' => "max-age=#{cache_control_value}")
+          if Gem::Version.new(Rack.release) >= Gem::Version.new("2.1.0")
+            rack_file = Rack::Files.new(resources_root, 'cache-control' => "max-age=#{cache_control_value}")
+          else
+            rack_file = Rack::File.new(resources_root, 'cache-control' => "max-age=#{cache_control_value}")
+          end
+
+          # the following line returns this:
+          # [200, {"last-modified" => "Thu, 11 Dec 2025 17:46:13 GMT", "content-type" => "text/javascript", "cache-control" => "max-age=86400", "content-length" => "46906"}, #<Rack::Files::Iterator:0x0000ffff38a2a0c0 @path="/tmp/src/vendor/rack-mini-profiler/lib/html/includes.js", @ranges=[0..46905], @options={mime_type: "text/javascript", size: 46906}>
+          rack_file.call(resources_env)
+        elsif @config.serve_file_mode == :direct
+          file_path = File.join(resources_root, file_name)
+          
+          unless File.exist?(file_path) && File.file?(file_path)
+            return [404, { 'content-type' => 'text/plain' }, ['File not found']]
+          end
+          
+          file_content = File.read(file_path)
+          content_type = Rack::Mime.mime_type(File.extname(file_name), 'text/plain')
+          
+          headers = {
+            'content-type' => content_type,
+            'cache-control' => "max-age=#{cache_control_value}",
+            'content-length' => file_content.bytesize.to_s
+          }
+          
+          [200, headers, [file_content]]
         else
-          rack_file = Rack::File.new(resources_root, 'cache-control' => "max-age=#{cache_control_value}")
+          raise "Unknown serve_file_mode: #{@config.serve_file_mode}"
         end
-
-        rack_file.call(resources_env)
       end
 
       def serve_results(env)
