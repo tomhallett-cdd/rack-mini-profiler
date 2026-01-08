@@ -111,8 +111,6 @@ module Rack
       end
 
       def redact_sql_queries?
-        return true if config.redact_sql_queries
-
         Thread.current[:mp_ongoing_snapshot] == true &&
         Rack::MiniProfiler.config.snapshots_redact_sql_queries
       end
@@ -156,6 +154,10 @@ module Rack
 
     def tool_disabled_message(client_settings)
       client_settings.handle_cookie(text_result(Rack::MiniProfiler.advanced_tools_message))
+    end
+
+    def redact_sql_queries_on_render?(env, user)
+      @config.redact_sql_queries_on_render && @config.redact_sql_queries_on_render.call(env, user)
     end
 
     def log_it(env, msg, data = {})
@@ -421,9 +423,13 @@ module Rack
       end
 
       begin
-        @storage.save(page_struct)
-        # no matter what it is, it should be unviewed, otherwise we will miss POST
-        @storage.set_unviewed(page_struct[:user], page_struct[:id])
+        # I added create, so i can do this in one INSERT, instead of an INSERT and an UPDATE
+        @storage.create(page_struct)
+
+        # this was the original code:
+        # @storage.save(page_struct)
+        # # no matter what it is, it should be unviewed, otherwise we will miss POST
+        # @storage.set_unviewed(page_struct[:user], page_struct[:id])
 
         # inject headers, script
         if status >= 200 && status < 300
@@ -435,7 +441,6 @@ module Rack
         end
       rescue Exception => e
         log_it(env, "EXCEPTION")
-        Rails.logger.error "==== MINI_PROFILER: EXCEPTION: #{e.message}"
         if @config.storage_failure != nil
           @config.storage_failure.call(e)
         end

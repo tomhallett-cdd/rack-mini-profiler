@@ -94,25 +94,33 @@ module Rack
         id          = request.params['id']
         group_name  = request.params['group']
         is_snapshot = group_name && group_name.size > 0
+        user = user(env)
         if is_snapshot
           page_struct = @storage.load_snapshot(id, group_name)
         else
-          page_struct = @storage.load(id)
+          page_struct = @storage.load(id, redact_sql_queries_on_render: redact_sql_queries_on_render?(env, user))
         end
+
         if !page_struct && is_snapshot
           id = ERB::Util.html_escape(id)
           return [404, {}, ["Snapshot with id '#{id}' not found"]]
         elsif !page_struct
-          @storage.set_viewed(user(env), id)
+          # because i'm storing everything in one table, i don't need todo this
+          #  while i could keep it, it's confusing because this `set_viewed` method doesn't update the
+          #   `page_struct[:has_user_viewed]` flag, but that's irrelevant because there is no page_struct...
+          # @storage.set_viewed(user(env), id)
           id        = ERB::Util.html_escape(id)
           user_info = ERB::Util.html_escape(user(env))
           return [404, {}, ["Request not found: #{id} - user #{user_info}"]]
         end
-        if !page_struct[:has_user_viewed] && !is_snapshot
+        if !page_struct[:has_user_viewed] && !is_snapshot && page_struct[:user] == user
           page_struct[:client_timings]  = TimerStruct::Client.init_from_form_data(env, page_struct)
           page_struct[:has_user_viewed] = true
-          @storage.save(page_struct)
-          @storage.set_viewed(user(env), id)
+
+          # I added `update` so it can be done in one UPDATE, instead of an UPDATE and a SAVE
+          @storage.update(page_struct)
+          # @storage.save(page_struct)
+          # @storage.set_viewed(user(env), id)
         end
 
         # If we're an XMLHttpRequest, serve up the contents as JSON
@@ -129,11 +137,12 @@ module Rack
       def serve_flamegraph(env)
         request     = Rack::Request.new(env)
         id          = request.params['id']
-        page_struct = @storage.load(id)
+        user = user(env)
+        page_struct = @storage.load(id, redact_sql_queries_on_render: redact_sql_queries_on_render?(env, user))
 
         if !page_struct
           id        = ERB::Util.html_escape(id)
-          user_info = ERB::Util.html_escape(user(env))
+          user_info = ERB::Util.html_escape(user)
           return [404, {}, ["Request not found: #{id} - user #{user_info}"]]
         end
 

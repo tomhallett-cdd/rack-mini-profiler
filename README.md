@@ -467,7 +467,7 @@ content_security_policy_nonce       | Rails: Current nonce<br>Rack: nil         
 enable_hotwire_turbo_drive_support  | `false`                                                 | Enable support for Hotwire TurboDrive page transitions.
 profile_parameter                   | `'pp'`                                                  | The query parameter used to interact with this gem.
 
-redact_sql_queries                  | `false`                                                 | When this is true, SQL queries will be redacted, but the backtrace and duration of each SQL query will be saved to keep debugging performance issues possible.  If this is true, then snapshots_redact_sql_queries is ignored.
+redact_sql_queries_on_render        | `false`                                                 | A lambda callback that returns false, so SQL queries are displayed when the user views the results.
 serve_file_mode                     | `:rack_files`                                           | How should asset responses be rendered: `:rack_files` uses the `Rack::Files` middleware, `:direct` renders the file directly from disk.
 
 ### Using MiniProfiler with `Rack::Deflate` middleware

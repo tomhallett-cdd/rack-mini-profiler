@@ -48,12 +48,21 @@ module Rack
 
       EXPIRES_IN_SECONDS = 60 * 60 * 24
 
+      def log_it_fs(msg, data = {})
+        msg = msg.to_s.ljust(40)[0,40]
+        data_s = data.present? ? " data: #{data.to_json}" : ""
+        Rails.logger.error "==== MINI_PROFILER: #{msg}: #{data_s}"
+      end
+
       def initialize(args = nil)
         args ||= {}
         @path = args[:path]
         @expires_in_seconds = args[:expires_in] || EXPIRES_IN_SECONDS
         raise ArgumentError.new :path unless @path
-        FileUtils.mkdir_p(@path) unless ::File.exist?(@path)
+        unless ::File.exist?(@path)
+          log_it_fs("FILE_STORE_CREATE_DIR")
+          FileUtils.mkdir_p(@path)
+        end
 
         @timer_struct_cache = FileCache.new(@path, "mp_timers")
         @timer_struct_lock  = Mutex.new
@@ -93,8 +102,29 @@ module Rack
         at_exit { t[:should_exit] = true }
       end
 
-      # TODO: what data is stored in a `page_struct`.  RackMiniProfilerPage ?
+      # TODO: what data is stored in a `page_struct`.  what should we call it?  RackMiniProfilerPage?
+      # page_struct.class
+      #   => Rack::MiniProfiler::TimerStruct::Page
+      # page_struct.methods - Object.new.methods
+      #   => [:page_name, :duration_ms_in_sql, :name, :duration_ms, :attributes, :extra_json, :root, :attributes_to_serialize, :[], :[]=]
+      # page_struct.duration_ms_in_sql
+      #   => 117.72117222426459
+      # (byebug) page_struct.attributes.keys
+      #   => [:id, :name, :started, :started_at, :machine_name, :level, :user, :has_user_viewed, :client_timings, :duration_milliseconds, :has_trivial_timings, :has_all_trivial_timings, :trivial_duration_threshold_milliseconds, :head, :sql_count, :cached_sql_count, :duration_milliseconds_in_sql, :has_sql_timings, :has_duplicate_sql_timings, :executed_readers, :executed_scalars, :executed_non_queries, :custom_timing_names, :custom_timing_stats, :custom_fields, :has_flamegraph, :flamegraph, :request_method, :request_path, :root]
+      # page_struct[:id] => "dw59v7cgga7w2ngyvh0u"
+      # page_struct[:root] => ....all the stuff....
+      # (byebug) page_struct[:user]
+      #  => "480475048"
+
+      # rack_mini_profiler_pages => id, mp_id (string, unique index), mp_user (string), viewed (boolean), data (Marshal.dump(page_struct))
       def save(page_struct)
+        log_it_fs("FILE_STORE_PAGE_SAVE", page_struct_id: page_struct[:id])
+        # RackMiniProfilerPage.create!(
+        #   mp_id: page_struct[:id],
+        #   mp_user: page_struct[:user],
+        #   viewed: false,
+        #   data: Marshal.dump(page_struct)
+        # )
         @timer_struct_lock.synchronize {
           @timer_struct_cache[page_struct[:id]] = page_struct
         }
@@ -104,6 +134,7 @@ module Rack
       # RackMiniProfilerPage.find(id)
       def load(id)
         @timer_struct_lock.synchronize {
+          log_it_fs("FILE_STORE_PAGE_LOAD", id:)
           @timer_struct_cache[id]
         }
       end
@@ -111,6 +142,7 @@ module Rack
       # user_view_cache?  page.viewed = false ?
       def set_unviewed(user, id)
         @user_view_lock.synchronize {
+          log_it_fs("FILE_STORE_PAGE_SET_UNVIEWED", id:)
           current = @user_view_cache[user]
           current = [] unless Array === current
           current << id
@@ -121,6 +153,7 @@ module Rack
       # page.viewed = true ?
       def set_viewed(user, id)
         @user_view_lock.synchronize {
+          log_it_fs("FILE_STORE_PAGE_SET_VIEWED", id:)
           @user_view_cache[user] ||= []
           current = @user_view_cache[user]
           current = [] unless Array === current
@@ -132,6 +165,7 @@ module Rack
       # Page.where(user_id:).update_all(viewed: false)
       def set_all_unviewed(user, ids)
         @user_view_lock.synchronize {
+          log_it_fs("FILE_STORE_PAGE_SET_ALL_UNVIEWED", ids:)
           @user_view_cache[user] = ids.uniq
         }
       end
@@ -139,23 +173,28 @@ module Rack
       # Page.where(user_id:).where(viewed: false).pluck(:page_id)
       def get_unviewed_ids(user)
         @user_view_lock.synchronize {
+          log_it_fs("FILE_STORE_PAGE_GET_ALL_UNVIEWED")
           @user_view_cache[user]
         }
       end
 
       # RackMiniProfilerAuthToken.delete_all
+      # NOTE: this is called in the tests (or it could be called if outside does Rack::MiniProfiler.config.storage_instance.flush_tokens)
       def flush_tokens
         @auth_token_lock.synchronize {
+          log_it_fs("FILE_STORE_AUTH_TOKEN_FLUSH_ALL")
           @auth_token_cache[""] = nil
         }
       end
 
+      # NOTE: these tokens are for the entire service, not a specific user
       # all wrapped in a transaction
       #   tokens = RackMiniProfilerAuthToken.where(user_id:).active.order(created_at: :desc).limit(2)
       #   if tokens.count == 2, return the tokens
       #   if tokens.count == 1, create a new token, then return both tokens
       #   if tokens.count == 0, create a new token, then return the token
       def allowed_tokens
+        log_it_fs("FILE_STORE_AUTH_TOKENS")
         @auth_token_lock.synchronize {
           token1, token2, cycle_at = @auth_token_cache[""]
 
@@ -167,7 +206,9 @@ module Rack
 
           @auth_token_cache[""] = [token1, token2, cycle_at]
 
-          [token1, token2].compact
+          val = [token1, token2].compact
+          log_it_fs("FILE_STORE_AUTH_TOKENS", tokens: val)
+          val
         }
       end
 
