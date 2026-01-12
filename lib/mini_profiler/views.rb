@@ -100,6 +100,27 @@ module Rack
         "#{@config.profile_parameter}=<a href='#{ERB::Util.html_escape(link)}'>#{postfix}</a>"
       end
 
+      def clean_page_struct_for_render_to_user(env, user, page_struct)
+        if @config.redact_sql_queries_on_render && @config.redact_sql_queries_on_render.call(env, user)
+          redact_page_struct_sql_queries!(page_struct) 
+        end
+      end
+
+      def redact_page_struct_sql_queries!(page_struct)
+        redact_sql_queries_for_timer_struct_request!(page_struct[:root])
+
+        # defensive sanity check that we cleaned up the queries in the page_struct
+        if page_struct.inspect.match?(/(SELECT |INSERT |UPDATE |DELETE )/i)
+          raise "SQL queries were not cleaned up for page struct: #{page_struct[:id]}"
+        end
+      end
+
+      # recursively clean the TimerStruct::Request and all of it's children
+      def redact_sql_queries_for_timer_struct_request!(timer_struct_request)
+        timer_struct_request.sql_timings.map(&:redact_sql_query)
+        timer_struct_request.children.map { |child| redact_sql_queries_for_timer_struct_request!(child) }
+      end
+
       def flamegraph(graph, path, env)
         response_headers = { 'content-type' => 'text/html' }
         iframe_src = "#{public_base_path(env)}speedscope/index.html"

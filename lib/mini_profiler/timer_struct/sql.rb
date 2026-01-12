@@ -83,6 +83,11 @@ module Rack
             [name, val]
           end
         end
+
+        def redact_sql_query
+          self[:formatted_command_string] = nil
+          self[:parameters] = nil
+        end
       end
     end
   end

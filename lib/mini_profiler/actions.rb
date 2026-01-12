@@ -77,6 +77,7 @@ module Rack
           file_content = File.read(file_path)
           content_type = Rack::Mime.mime_type(File.extname(file_name), 'text/plain')
           
+          # TODO: add etag support??
           headers = {
             'content-type' => content_type,
             'cache-control' => "max-age=#{cache_control_value}",
@@ -98,17 +99,14 @@ module Rack
         if is_snapshot
           page_struct = @storage.load_snapshot(id, group_name)
         else
-          page_struct = @storage.load(id, redact_sql_queries_on_render: redact_sql_queries_on_render?(env, user))
+          page_struct = @storage.load(id)
         end
 
         if !page_struct && is_snapshot
           id = ERB::Util.html_escape(id)
           return [404, {}, ["Snapshot with id '#{id}' not found"]]
         elsif !page_struct
-          # because i'm storing everything in one table, i don't need todo this
-          #  while i could keep it, it's confusing because this `set_viewed` method doesn't update the
-          #   `page_struct[:has_user_viewed]` flag, but that's irrelevant because there is no page_struct...
-          # @storage.set_viewed(user(env), id)
+          @storage.set_viewed(user, id)
           id        = ERB::Util.html_escape(id)
           user_info = ERB::Util.html_escape(user(env))
           return [404, {}, ["Request not found: #{id} - user #{user_info}"]]
@@ -116,12 +114,13 @@ module Rack
         if !page_struct[:has_user_viewed] && !is_snapshot && page_struct[:user] == user
           page_struct[:client_timings]  = TimerStruct::Client.init_from_form_data(env, page_struct)
           page_struct[:has_user_viewed] = true
-
-          # I added `update` so it can be done in one UPDATE, instead of an UPDATE and a SAVE
-          @storage.update(page_struct)
-          # @storage.save(page_struct)
-          # @storage.set_viewed(user(env), id)
+          @storage.save(page_struct)
+          @storage.set_viewed(user(env), id)
         end
+
+        # NOTE: we clean the page_struct AFTER any calls to @storage.save(page_struct) or else the cleaned struct, ie: struct with
+        #   redacted sql will be saved to storage, resulting in data loss for everyone
+        clean_page_struct_for_render_to_user(env, user, page_struct)
 
         # If we're an XMLHttpRequest, serve up the contents as JSON
         if request.xhr?
@@ -138,7 +137,7 @@ module Rack
         request     = Rack::Request.new(env)
         id          = request.params['id']
         user = user(env)
-        page_struct = @storage.load(id, redact_sql_queries_on_render: redact_sql_queries_on_render?(env, user))
+        page_struct = @storage.load(id)
 
         if !page_struct
           id        = ERB::Util.html_escape(id)
@@ -149,6 +148,8 @@ module Rack
         if !page_struct[:flamegraph]
           return [404, {}, ["No flamegraph available for #{ERB::Util.html_escape(id)}"]]
         end
+
+        clean_page_struct_for_render_to_user(env, user, page_struct)
 
         self.flamegraph(page_struct[:flamegraph], page_struct[:request_path], env)
       end

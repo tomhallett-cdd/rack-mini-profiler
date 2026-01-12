@@ -156,10 +156,6 @@ module Rack
       client_settings.handle_cookie(text_result(Rack::MiniProfiler.advanced_tools_message))
     end
 
-    def redact_sql_queries_on_render?(env, user)
-      @config.redact_sql_queries_on_render && @config.redact_sql_queries_on_render.call(env, user)
-    end
-
     def log_it(env, msg, data = {})
       request = ::Rack::Request.new(env)
       msg = msg.to_s.ljust(40)[0,40]
@@ -423,13 +419,9 @@ module Rack
       end
 
       begin
-        # I added create, so i can do this in one INSERT, instead of an INSERT and an UPDATE
-        @storage.create(page_struct)
-
-        # this was the original code:
-        # @storage.save(page_struct)
-        # # no matter what it is, it should be unviewed, otherwise we will miss POST
-        # @storage.set_unviewed(page_struct[:user], page_struct[:id])
+        @storage.save(page_struct)
+        # no matter what it is, it should be unviewed, otherwise we will miss POST
+        @storage.set_unviewed(page_struct[:user], page_struct[:id])
 
         # inject headers, script
         if status >= 200 && status < 300
