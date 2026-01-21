@@ -48,19 +48,12 @@ module Rack
 
       EXPIRES_IN_SECONDS = 60 * 60 * 24
 
-      def log_it_fs(msg, data = {})
-        msg = msg.to_s.ljust(40)[0,40]
-        data_s = data.present? ? " data: #{data.to_json}" : ""
-        Rails.logger.error "==== MINI_PROFILER: #{msg}: #{data_s}"
-      end
-
       def initialize(args = nil)
         args ||= {}
         @path = args[:path]
         @expires_in_seconds = args[:expires_in] || EXPIRES_IN_SECONDS
         raise ArgumentError.new :path unless @path
         unless ::File.exist?(@path)
-          log_it_fs("FILE_STORE_CREATE_DIR")
           FileUtils.mkdir_p(@path)
         end
 
@@ -103,7 +96,6 @@ module Rack
       end
 
       def save(page_struct)
-        log_it_fs("FILE_STORE_PAGE_SAVE", page_struct_id: page_struct[:id])
         @timer_struct_lock.synchronize {
           @timer_struct_cache[page_struct[:id]] = page_struct
         }
@@ -111,14 +103,12 @@ module Rack
 
       def load(id)
         @timer_struct_lock.synchronize {
-          log_it_fs("FILE_STORE_PAGE_LOAD", id:)
           @timer_struct_cache[id]
         }
       end
 
       def set_unviewed(user, id)
         @user_view_lock.synchronize {
-          log_it_fs("FILE_STORE_PAGE_SET_UNVIEWED", id:)
           current = @user_view_cache[user]
           current = [] unless Array === current
           current << id
@@ -128,7 +118,6 @@ module Rack
 
       def set_viewed(user, id)
         @user_view_lock.synchronize {
-          log_it_fs("FILE_STORE_PAGE_SET_VIEWED", id:)
           @user_view_cache[user] ||= []
           current = @user_view_cache[user]
           current = [] unless Array === current
@@ -139,33 +128,23 @@ module Rack
 
       def set_all_unviewed(user, ids)
         @user_view_lock.synchronize {
-          log_it_fs("FILE_STORE_PAGE_SET_ALL_UNVIEWED", ids:)
           @user_view_cache[user] = ids.uniq
         }
       end
 
       def get_unviewed_ids(user)
         @user_view_lock.synchronize {
-          log_it_fs("FILE_STORE_PAGE_GET_ALL_UNVIEWED")
           @user_view_cache[user]
         }
       end
 
       def flush_tokens
         @auth_token_lock.synchronize {
-          log_it_fs("FILE_STORE_AUTH_TOKEN_FLUSH_ALL")
           @auth_token_cache[""] = nil
         }
       end
 
-      # NOTE: these tokens are for the entire service, not a specific user
-      # all wrapped in a transaction
-      #   tokens = RackMiniProfilerAuthToken.where(user_id:).active.order(created_at: :desc).limit(2)
-      #   if tokens.count == 2, return the tokens
-      #   if tokens.count == 1, create a new token, then return both tokens
-      #   if tokens.count == 0, create a new token, then return the token
       def allowed_tokens
-        log_it_fs("FILE_STORE_AUTH_TOKENS")
         @auth_token_lock.synchronize {
           token1, token2, cycle_at = @auth_token_cache[""]
 
@@ -177,9 +156,7 @@ module Rack
 
           @auth_token_cache[""] = [token1, token2, cycle_at]
 
-          val = [token1, token2].compact
-          log_it_fs("FILE_STORE_AUTH_TOKENS", tokens: val)
-          val
+          [token1, token2].compact
         }
       end
 

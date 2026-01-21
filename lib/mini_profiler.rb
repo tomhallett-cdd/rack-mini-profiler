@@ -131,9 +131,7 @@ module Rack
     end
 
     def user(env)
-      val = @config.user_provider.call(env)
-      log_it(env, "USER_PROVIDER", user_identity: val)
-      val
+      @config.user_provider.call(env)
     end
 
     def current
@@ -156,20 +154,7 @@ module Rack
       client_settings.handle_cookie(text_result(Rack::MiniProfiler.advanced_tools_message))
     end
 
-    def log_it(env, msg, data = {})
-      request = ::Rack::Request.new(env)
-      msg = msg.to_s.ljust(40)[0,40]
-      data_s = data.present? ? " data: #{data.to_json}" : ""
-      body_s = ""
-      if request.path == "/mini-profiler-resources/results" && request.post?
-        id = request.POST["id"]
-        body_s = " id=#{id}"
-      end
-      Rails.logger.error "==== MINI_PROFILER [#{request.ip}]: #{msg}: path: #{request.path}#{body_s}#{data_s}"
-    end
-
     def call(env)
-      log_it(env, "CALL")
       start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       client_settings = ClientSettings.new(env, @storage, start)
       MiniProfiler.deauthorize_request if @config.authorization_mode == :allow_authorized
@@ -191,7 +176,6 @@ module Rack
         end
       )
       if skip_it
-        log_it(env, "SKIP_IT_TRUE")
         return client_settings.handle_cookie(@app.call(env), preserve_cookie: true)
       end
 
@@ -201,7 +185,6 @@ module Rack
         @config.authorization_mode == :allow_authorized &&
         !client_settings.has_valid_cookie?
       )
-        log_it(env, "PRE_AUTH_OR_NO_COOKIE")
         if take_snapshot?(path)
           return client_settings.handle_cookie(take_snapshot(env, start))
         else
@@ -215,36 +198,29 @@ module Rack
 
         case file_name
         when 'results'
-          log_it(env, "SERVE_RESULTS")
           return serve_results(env)
         when 'snapshots'
-          log_it(env, "SERVE_SNAPSHOT")
           self.current = nil
           return serve_snapshot(env)
         when 'flamegraph'
-          log_it(env, "SERVE_FLAMEGRAPH")
           return serve_flamegraph(env)
         end
 
-        log_it(env, "SERVE_FILE")
         return client_settings.handle_cookie(serve_file(env, file_name: file_name), preserve_cookie: true)
       end
 
       has_disable_cookie = client_settings.disable_profiling?
       # manual session disable / enable
       if matches_action?('disable', env) || has_disable_cookie
-        log_it(env, "DISABLE_PROFILING")
         skip_it = true
       end
 
       if matches_action?('enable', env)
-        log_it(env, "ENABLE_PROFILING")
         skip_it = false
         config.enabled = true
       end
 
       if skip_it || !config.enabled
-        log_it(env, "DISABLING_PROFILING")
         status, headers, body = @app.call(env)
         client_settings.disable_profiling = true
         return client_settings.handle_cookie([status, headers, body])
@@ -371,7 +347,6 @@ module Rack
       end
 
       if skip_it
-        log_it(env, "SKIP_IT_VERSION_2")
         return client_settings.handle_cookie([status, headers, body], preserve_cookie: request_skipped_app)
       end
 
@@ -427,18 +402,15 @@ module Rack
         if status >= 200 && status < 300
           result = inject_profiler(env, status, headers, body)
           if result
-            log_it(env, "INJECT_PROFILER")
             return client_settings.handle_cookie(result)
           end
         end
       rescue Exception => e
-        log_it(env, "EXCEPTION")
         if @config.storage_failure != nil
           @config.storage_failure.call(e)
         end
       end
 
-      log_it(env, "HANDLE_COOKIE_BOTTOM")
       client_settings.handle_cookie([status, headers, body])
     ensure
       # Make sure this always happens
